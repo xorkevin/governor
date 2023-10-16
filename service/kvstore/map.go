@@ -41,6 +41,23 @@ func NewMap() *Map {
 	}
 }
 
+func (s *Map) Dump() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var b strings.Builder
+	for k, v := range s.store {
+		if v.expire.Before(time.Now()) {
+			continue
+		}
+		b.WriteString(k)
+		b.WriteString(":")
+		b.WriteString(v.val)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 func (s *Map) Ping(ctx context.Context) error {
 	return nil
 }

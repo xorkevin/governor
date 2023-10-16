@@ -437,7 +437,7 @@ type (
 	}
 )
 
-func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits int) (*resAddOTP, error) {
+func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits int, period int) (*resAddOTP, error) {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
 		if errors.Is(err, dbsql.ErrNotFound) {
@@ -453,7 +453,7 @@ func (s *Service) addOTP(ctx context.Context, userid string, alg string, digits 
 	if err != nil {
 		return nil, err
 	}
-	uri, backup, err := s.users.GenerateOTPSecret(ctx, cipher.cipher, m, s.authSettings.otpIssuer, alg, digits)
+	uri, backup, err := s.users.GenerateOTPSecret(ctx, cipher.cipher, m, s.authSettings.otpIssuer, alg, digits, period)
 	if err != nil {
 		return nil, kerrors.WithMsg(err, "Failed to generate otp secret")
 	}

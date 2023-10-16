@@ -165,6 +165,7 @@ type (
 		Userid string `valid:"userid,has" json:"-"`
 		Alg    string `valid:"OTPAlg" json:"alg"`
 		Digits int    `valid:"OTPDigits" json:"digits"`
+		Period int    `valid:"OTPPeriod" json:"period"`
 	}
 )
 
@@ -180,7 +181,7 @@ func (s *router) addOTP(c *governor.Context) {
 		return
 	}
 
-	res, err := s.s.addOTP(c.Ctx(), req.Userid, req.Alg, req.Digits)
+	res, err := s.s.addOTP(c.Ctx(), req.Userid, req.Alg, req.Digits, req.Period)
 	if err != nil {
 		c.WriteError(err)
 		return
@@ -192,7 +193,7 @@ type (
 	//forge:valid
 	reqOTPCode struct {
 		Userid string `valid:"userid,has" json:"-"`
-		Code   string `valid:"OTPCode,opt" json:"code"`
+		Code   string `valid:"OTPCode,has" json:"code"`
 	}
 )
 

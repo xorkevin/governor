@@ -67,10 +67,6 @@ func TestError(t *testing.T) {
 			Err:    ErrInvalidServerRes,
 			String: "Invalid server response",
 		},
-		{
-			Err:    ErrServerRes,
-			String: "Error server response",
-		},
 	} {
 		tc := tc
 		assert.Equal(tc.String, tc.Err.Error())

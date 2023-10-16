@@ -32,7 +32,7 @@ type (
 		RehashPass(ctx context.Context, m *Model, password string) error
 		ValidateOTPCode(keyring *h2cipher.Keyring, m *Model, code string) (bool, error)
 		ValidateOTPBackup(keyring *h2cipher.Keyring, m *Model, backup string) (bool, error)
-		GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error)
+		GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int, period int) (string, string, error)
 		EnableOTP(ctx context.Context, m *Model) error
 		DisableOTP(ctx context.Context, m *Model) error
 		UpdateLoginFailed(ctx context.Context, m *Model) error
@@ -218,12 +218,12 @@ func (r *repo) ValidateOTPBackup(keyring *h2cipher.Keyring, m *Model, backup str
 }
 
 // GenerateOTPSecret generates an otp secret
-func (r *repo) GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int) (string, string, error) {
+func (r *repo) GenerateOTPSecret(ctx context.Context, cipher h2cipher.Cipher, m *Model, issuer string, alg string, digits int, period int) (string, string, error) {
 	params, uri, err := h2otp.TOTPGenerateSecret(totpSecretLen, h2otp.TOTPURI{
 		TOTPConfig: h2otp.TOTPConfig{
 			Alg:    alg,
 			Digits: digits,
-			Period: 30,
+			Period: uint64(period),
 			Leeway: 1,
 		},
 		Issuer:      issuer,

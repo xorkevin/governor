@@ -244,6 +244,9 @@ func (r reqAddOTP) valid() error {
 	if err := validOTPDigits(r.Digits); err != nil {
 		return err
 	}
+	if err := validOTPPeriod(r.Period); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -251,7 +254,7 @@ func (r reqOTPCode) valid() error {
 	if err := validhasUserid(r.Userid); err != nil {
 		return err
 	}
-	if err := validoptOTPCode(r.Code); err != nil {
+	if err := validhasOTPCode(r.Code); err != nil {
 		return err
 	}
 	return nil

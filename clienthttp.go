@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"xorkevin.dev/governor/util/kjson"
@@ -41,8 +43,6 @@ var (
 	ErrSendClientReq errSendClientReq
 	// ErrInvalidServerRes is returned on an invalid server response
 	ErrInvalidServerRes errInvalidServerRes
-	// ErrServerRes is a returned server error
-	ErrServerRes errServerRes
 )
 
 type (
@@ -64,8 +64,33 @@ func (e errInvalidServerRes) Error() string {
 	return "Invalid server response"
 }
 
-func (e errServerRes) Error() string {
-	return "Error server response"
+type (
+	// ErrorServerRes is a returned server error
+	ErrorServerRes struct {
+		Status  int
+		Code    string
+		Message string
+	}
+)
+
+// WriteError implements [xorkevin.dev/kerrors.ErrorWriter]
+func (e *ErrorServerRes) WriteError(b io.Writer) {
+	io.WriteString(b, "(")
+	io.WriteString(b, strconv.Itoa(e.Status))
+	io.WriteString(b, ") ")
+	io.WriteString(b, e.Message)
+	if e.Code != "" {
+		io.WriteString(b, " [")
+		io.WriteString(b, e.Code)
+		io.WriteString(b, "]")
+	}
+}
+
+// Error implements error
+func (e *ErrorServerRes) Error() string {
+	var b strings.Builder
+	e.WriteError(&b)
+	return b.String()
 }
 
 func newHTTPClient(c configHTTPClient) *httpClient {
@@ -120,7 +145,11 @@ func (c *httpClient) Do(ctx context.Context, r *http.Request) (_ *http.Response,
 		if err := kjson.Unmarshal(b, &errres); err != nil {
 			return res, kerrors.WithKind(err, ErrInvalidServerRes, "Failed reading response")
 		}
-		return res, kerrors.WithKind(nil, ErrServerRes, errres.Message)
+		return res, kerrors.WithKind(nil, &ErrorServerRes{
+			Status:  res.StatusCode,
+			Code:    errres.Code,
+			Message: errres.Message,
+		}, errres.Message)
 	}
 	return res, nil
 }

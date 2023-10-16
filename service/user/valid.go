@@ -134,6 +134,13 @@ func validoptOTPCode(code string) error {
 	return nil
 }
 
+func validhasOTPCode(code string) error {
+	if len(code) == 0 {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "OTP code must be provided")
+	}
+	return validoptOTPCode(code)
+}
+
 func validoptSessionID(sessionID string) error {
 	if len(sessionID) > lengthCapSessionID {
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Session id is too long")
@@ -288,9 +295,18 @@ func validOTPAlg(alg string) error {
 
 func validOTPDigits(digits int) error {
 	switch digits {
-	case 6, 8:
+	case 6, 7, 8:
 	default:
 		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp digits")
+	}
+	return nil
+}
+
+func validOTPPeriod(period int) error {
+	switch period {
+	case 15, 30, 60:
+	default:
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Invalid otp period")
 	}
 	return nil
 }

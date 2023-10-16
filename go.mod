@@ -32,7 +32,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0
 	nhooyr.io/websocket v1.8.7
 	xorkevin.dev/forge v0.5.2
-	xorkevin.dev/hunter2 v0.2.10
+	xorkevin.dev/hunter2 v0.2.11
 	xorkevin.dev/kerrors v0.1.5
 	xorkevin.dev/kfs v0.1.2
 	xorkevin.dev/klog v0.1.0

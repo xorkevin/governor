@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"xorkevin.dev/governor/service/kvstore"
 	"xorkevin.dev/governor/service/ws"
@@ -24,7 +25,7 @@ func (s *Service) presenceHandler(ctx context.Context, props ws.PresenceEventPro
 	default:
 		return nil
 	}
-	if err := s.kvpresence.Set(ctx, props.Userid, subloc, 60); err != nil {
+	if err := s.kvpresence.Set(ctx, props.Userid, subloc, time.Minute); err != nil {
 		return kerrors.WithMsg(err, "Failed to set presence")
 	}
 	return nil

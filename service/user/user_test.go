@@ -3,10 +3,12 @@ package user
 import (
 	"bytes"
 	"context"
+	"encoding/base32"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +32,12 @@ import (
 	"xorkevin.dev/governor/service/user/sessionmodel"
 	"xorkevin.dev/governor/service/user/usermodel"
 	"xorkevin.dev/governor/util/kjson"
+	"xorkevin.dev/hunter2/h2cipher/xchacha20poly1305"
+	"xorkevin.dev/hunter2/h2otp"
 	"xorkevin.dev/klog"
 )
+
+var base32RawEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 func TestUsers(t *testing.T) {
 	if testing.Short() {
@@ -43,6 +49,9 @@ func TestUsers(t *testing.T) {
 	assert := require.New(t)
 
 	gateClient, err := gatetest.NewClient()
+	assert.NoError(err)
+
+	otpcipherconfig, err := xchacha20poly1305.NewConfig()
 	assert.NoError(err)
 
 	{
@@ -68,7 +77,7 @@ func TestUsers(t *testing.T) {
 				"extkeys": []string{gateClient.ExtKeyStr},
 			},
 			"otpkey": map[string]any{
-				"secrets": []string{},
+				"secrets": []string{otpcipherconfig.String()},
 			},
 		},
 	}, nil)
@@ -547,8 +556,10 @@ func TestUsers(t *testing.T) {
 		assert.Equal(template.KindLocal, maillog.Records[0].Tpl.Kind)
 		assert.Equal("passreset", maillog.Records[0].Tpl.Name)
 		maillog.Reset()
+	}
 
-		r, err = httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
 			Username: "xorkevin2",
 			Password: "password3",
 		})
@@ -560,8 +571,96 @@ func TestUsers(t *testing.T) {
 
 		assert.True(authbody.Valid)
 		gateClient.Token = authbody.AccessToken
+	}
 
-		r, err = httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/logout", regularUserid), nil)
+	{
+		r, err := httpc.ReqJSON(http.MethodPut, "/u/user/otp", reqAddOTP{
+			Alg:    h2otp.AlgSHA512,
+			Digits: h2otp.OTPDigitsDefault,
+			Period: int(h2otp.TOTPPeriodDefault),
+		})
+		assert.NoError(err)
+
+		var body resAddOTP
+		_, err = httpc.DoJSON(context.Background(), r, &body)
+		assert.NoError(err)
+
+		totpuri, err := url.Parse(body.URI)
+		assert.NoError(err)
+		assert.Equal("otpauth", totpuri.Scheme)
+		assert.Equal("totp", totpuri.Host)
+		assert.Equal(h2otp.AlgSHA512, totpuri.Query().Get("algorithm"))
+		assert.Equal(strconv.Itoa(h2otp.OTPDigitsDefault), totpuri.Query().Get("digits"))
+		assert.Equal(strconv.FormatUint(h2otp.TOTPPeriodDefault, 10), totpuri.Query().Get("period"))
+		secret, err := base32RawEncoding.DecodeString(totpuri.Query().Get("secret"))
+		assert.NoError(err)
+		sha512, ok := h2otp.DefaultHashes.Get(h2otp.AlgSHA512)
+		assert.True(ok)
+		code, err := h2otp.TOTPNow(secret, h2otp.TOTPOpts{
+			Alg:    sha512,
+			Digits: h2otp.OTPDigitsDefault,
+			Period: h2otp.TOTPPeriodDefault,
+		})
+		assert.NoError(err)
+
+		r, err = httpc.ReqJSON(http.MethodPut, "/u/user/otp/verify", reqOTPCode{
+			Code: code,
+		})
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+				Username: "xorkevin2",
+				Password: "password3",
+			})
+			assert.NoError(err)
+
+			res, err := httpc.DoJSON(context.Background(), r, nil)
+			assert.Error(err)
+			assert.Equal(http.StatusBadRequest, res.StatusCode)
+			var errres *governor.ErrorServerRes
+			assert.ErrorAs(err, &errres)
+			assert.Equal("otp_required", errres.Code)
+		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+				Username: "xorkevin2",
+				Password: "password3",
+				Code:     code,
+			})
+			assert.NoError(err)
+
+			var authbody resUserAuth
+			_, err = httpc.DoJSON(context.Background(), r, &authbody)
+			assert.NoError(err)
+
+			assert.True(authbody.Valid)
+			gateClient.Token = authbody.AccessToken
+		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+				Username: "xorkevin2",
+				Password: "password3",
+				Code:     code,
+			})
+			assert.NoError(err)
+
+			res, err := httpc.DoJSON(context.Background(), r, nil)
+			assert.Error(err)
+			assert.Equal(http.StatusBadRequest, res.StatusCode)
+			var errres *governor.ErrorServerRes
+			assert.ErrorAs(err, &errres)
+			assert.Equal("OTP code already used", errres.Message)
+		}
+	}
+
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, fmt.Sprintf("/u/auth/id/%s/logout", regularUserid), nil)
 		assert.NoError(err)
 
 		_, err = httpc.DoNoContent(context.Background(), r)
@@ -593,7 +692,7 @@ func TestUsers(t *testing.T) {
 				CreationTime: body.CreationTime,
 			},
 			Email:      "test3@example.com",
-			OTPEnabled: false,
+			OTPEnabled: true,
 		}, body)
 	}
 }

@@ -353,8 +353,7 @@ func TestClient(t *testing.T) {
 
 	err = clientC.fail(nil)
 	assert.Error(err)
-	assert.ErrorIs(err, ErrServerRes)
-	var kerr *kerrors.Error
-	assert.ErrorAs(err, &kerr)
-	assert.Equal("Test fail", kerr.Message)
+	var errres *ErrorServerRes
+	assert.ErrorAs(err, &errres)
+	assert.Equal("Test fail", errres.Message)
 }
