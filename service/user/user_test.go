@@ -163,8 +163,10 @@ func TestUsers(t *testing.T) {
 	}
 	assert.NoError(userClient.createUser(nil))
 
-	regularUserid := strings.TrimSpace(out.String())
+	var resRegularUserCreate resUserUpdate
+	assert.NoError(kjson.Unmarshal(out.Bytes(), &resRegularUserCreate))
 	out.Reset()
+	regularUserid := resRegularUserCreate.Userid
 
 	{
 		userClient.listFlags = listFlags{
@@ -308,5 +310,61 @@ func TestUsers(t *testing.T) {
 		out.Reset()
 
 		assert.Equal([]string{adminUserid}, body.Userids)
+	}
+
+	{
+		userClient.useridFlags = useridFlags{
+			userid: regularUserid,
+		}
+		userClient.roleFlags = roleFlags{
+			name: "gov.svc.user",
+		}
+		assert.NoError(userClient.updateRole(nil))
+
+		userClient.roleFlags = roleFlags{
+			mod:  false,
+			name: "gov.svc.user",
+		}
+		userClient.listFlags = listFlags{
+			amount: 8,
+		}
+		assert.NoError(userClient.getRoleMembers(nil))
+
+		var body resUserList
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal([]string{regularUserid}, body.Userids)
+	}
+
+	regularToken, err := gateClient.GenToken(regularUserid, time.Hour, "")
+	assert.NoError(err)
+	gateClient.Token = regularToken
+
+	{
+		userClient.accountFlags = accountFlags{
+			firstname: "Test2",
+			lastname:  "User2",
+		}
+		assert.NoError(userClient.updateName(nil))
+
+		userClient.getUserFlags = getUserFlags{}
+		assert.NoError(userClient.getUser(nil))
+
+		var body ResUserGet
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Equal(ResUserGet{
+			ResUserGetPublic: ResUserGetPublic{
+				Userid:       regularUserid,
+				Username:     "xorkevin2",
+				FirstName:    "Test2",
+				LastName:     "User2",
+				CreationTime: body.CreationTime,
+			},
+			Email:      "test2@example.com",
+			OTPEnabled: false,
+		}, body)
 	}
 }

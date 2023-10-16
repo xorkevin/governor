@@ -44,6 +44,7 @@ type (
 		GetByUsername(ctx context.Context, username string) (*Model, error)
 		GetByEmail(ctx context.Context, email string) (*Model, error)
 		Insert(ctx context.Context, m *Model) error
+		UpdateUsername(ctx context.Context, m *Model) error
 		UpdateProps(ctx context.Context, m *Model) error
 		UpdateEmail(ctx context.Context, m *Model) error
 		Delete(ctx context.Context, m *Model) error
@@ -86,8 +87,12 @@ type (
 	}
 
 	//forge:model:query user
+	userUsername struct {
+		Username string `model:"username"`
+	}
+
+	//forge:model:query user
 	userProps struct {
-		Username  string `model:"username"`
 		FirstName string `model:"first_name"`
 		LastName  string `model:"last_name"`
 	}
@@ -433,6 +438,20 @@ func (r *repo) Insert(ctx context.Context, m *Model) error {
 	return nil
 }
 
+// UpdateUsername updates the username
+func (r *repo) UpdateUsername(ctx context.Context, m *Model) error {
+	d, err := r.db.DB(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.table.UpduserUsernameByID(ctx, d, &userUsername{
+		Username: m.Username,
+	}, m.Userid); err != nil {
+		return kerrors.WithMsg(err, "Failed to update username")
+	}
+	return nil
+}
+
 // UpdateProps updates the user props
 func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 	d, err := r.db.DB(ctx)
@@ -440,7 +459,6 @@ func (r *repo) UpdateProps(ctx context.Context, m *Model) error {
 		return err
 	}
 	if err := r.table.UpduserPropsByID(ctx, d, &userProps{
-		Username:  m.Username,
 		FirstName: m.FirstName,
 		LastName:  m.LastName,
 	}, m.Userid); err != nil {

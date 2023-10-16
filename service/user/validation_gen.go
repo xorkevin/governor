@@ -148,10 +148,17 @@ func (r reqGetUserApprovals) valid() error {
 	return nil
 }
 
-func (r reqUserPut) valid() error {
-	if err := validUsername(r.Username); err != nil {
+func (r reqUsernamePut) valid() error {
+	if err := validUsername(r.NewUsername); err != nil {
 		return err
 	}
+	if err := validhasUsername(r.OldUsername); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r reqUserPut) valid() error {
 	if err := validFirstName(r.FirstName); err != nil {
 		return err
 	}

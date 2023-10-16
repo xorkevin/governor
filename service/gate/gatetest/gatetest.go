@@ -75,6 +75,7 @@ func (c *Client) GenToken(subject string, expire time.Duration, scope string) (s
 		Expiry:    now.Add(expire).Unix(),
 		ID:        u.Base64(),
 		SessionID: u.Base64(),
+		AuthAt:    now.Unix(),
 		Scope:     scope,
 	}
 	token, err := jwt.Signed(sig).Claims(claims).CompactSerialize()

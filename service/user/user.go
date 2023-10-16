@@ -225,7 +225,7 @@ func New(
 }
 
 func (s *Service) Register(r governor.ConfigRegistrar) {
-	s.rolens = "gov." + r.Name()
+	s.rolens = "gov.svc." + r.Name()
 	s.scopens = "gov." + r.Name()
 	s.eventSettings = eventSettings{
 		streamNS:    r.Name(),

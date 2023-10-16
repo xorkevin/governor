@@ -166,8 +166,16 @@ func (t *userModelTable) GetInfoByUsernamePrefix(ctx context.Context, d sqldb.Ex
 	return res, nil
 }
 
+func (t *userModelTable) UpduserUsernameByID(ctx context.Context, d sqldb.Executor, m *userUsername, userid string) error {
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET username = $1 WHERE userid = $2;", m.Username, userid)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (t *userModelTable) UpduserPropsByID(ctx context.Context, d sqldb.Executor, m *userProps, userid string) error {
-	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (username, first_name, last_name) = ($1, $2, $3) WHERE userid = $4;", m.Username, m.FirstName, m.LastName, userid)
+	_, err := d.ExecContext(ctx, "UPDATE "+t.TableName+" SET (first_name, last_name) = ($1, $2) WHERE userid = $3;", m.FirstName, m.LastName, userid)
 	if err != nil {
 		return err
 	}

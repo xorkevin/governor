@@ -42,6 +42,13 @@
             "conditions": [{"col": "userid", "cond": "like"}]
           }
         ],
+        "userUsername": [
+          {
+            "kind": "updeq",
+            "name": "ByID",
+            "conditions": [{"col": "userid"}]
+          }
+        ],
         "userProps": [
           {
             "kind": "updeq",

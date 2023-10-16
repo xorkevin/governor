@@ -27,6 +27,7 @@ type (
 		useridFlags  useridFlags
 		keyFlags     keyFlags
 		roleFlags    roleFlags
+		accountFlags accountFlags
 	}
 
 	addUserFlags struct {
@@ -58,6 +59,12 @@ type (
 		mod       bool
 		intersect string
 		name      string
+		rm        bool
+	}
+
+	accountFlags struct {
+		firstname string
+		lastname  string
 	}
 )
 
@@ -227,64 +234,33 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 		},
 	}, governor.CmdHandlerFunc(c.commitUser))
 
-	approval := cr.Group(governor.CmdDesc{
-		Usage: "approval",
-		Short: "manage user approvals",
-		Long:  "manage user approvals",
+	account := cr.Group(governor.CmdDesc{
+		Usage: "account",
+		Short: "manage user account",
+		Long:  "manage user account",
 	})
 
-	approval.Register(governor.CmdDesc{
-		Usage: "list",
-		Short: "list user approvals",
-		Long:  "list user approvals",
+	account.Register(governor.CmdDesc{
+		Usage: "update-name",
+		Short: "update name",
+		Long:  "update name",
 		Flags: []governor.CmdFlag{
 			{
-				Long:     "amount",
-				Short:    "a",
-				Usage:    "amount",
-				Required: false,
-				Default:  8,
-				Value:    &c.listFlags.amount,
-			},
-			{
-				Long:     "offset",
-				Short:    "o",
-				Usage:    "offset",
-				Required: false,
-				Value:    &c.listFlags.offset,
-			},
-		},
-	}, governor.CmdHandlerFunc(c.getApprovals))
-
-	approval.Register(governor.CmdDesc{
-		Usage: "accept",
-		Short: "accept user approvals",
-		Long:  "accept user approvals",
-		Flags: []governor.CmdFlag{
-			{
-				Long:     "userid",
-				Short:    "i",
-				Usage:    "userid",
+				Long:     "firstname",
+				Short:    "",
+				Usage:    "user first name",
 				Required: true,
-				Value:    &c.useridFlags.userid,
+				Value:    &c.accountFlags.firstname,
 			},
-		},
-	}, governor.CmdHandlerFunc(c.acceptApproval))
-
-	approval.Register(governor.CmdDesc{
-		Usage: "deny",
-		Short: "deny user approvals",
-		Long:  "deny user approvals",
-		Flags: []governor.CmdFlag{
 			{
-				Long:     "userid",
-				Short:    "i",
-				Usage:    "userid",
+				Long:     "lastname",
+				Short:    "",
+				Usage:    "user last name",
 				Required: true,
-				Value:    &c.useridFlags.userid,
+				Value:    &c.accountFlags.lastname,
 			},
 		},
-	}, governor.CmdHandlerFunc(c.denyApproval))
+	}, governor.CmdHandlerFunc(c.updateName))
 
 	role := cr.Group(governor.CmdDesc{
 		Usage: "role",
@@ -365,7 +341,7 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 		Flags: []governor.CmdFlag{
 			{
 				Long:     "role",
-				Short:    "i",
+				Short:    "r",
 				Usage:    "role",
 				Required: true,
 				Value:    &c.roleFlags.name,
@@ -379,6 +355,101 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.getRoleMembers))
+
+	role.Register(governor.CmdDesc{
+		Usage: "update",
+		Short: "update user roles",
+		Long:  "update user roles",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: false,
+				Value:    &c.useridFlags.userid,
+			},
+			{
+				Long:     "rm",
+				Short:    "d",
+				Usage:    "remove",
+				Required: false,
+				Value:    &c.roleFlags.rm,
+			},
+			{
+				Long:     "mod",
+				Short:    "m",
+				Usage:    "mod",
+				Required: false,
+				Value:    &c.roleFlags.mod,
+			},
+			{
+				Long:     "role",
+				Short:    "r",
+				Usage:    "role",
+				Required: true,
+				Value:    &c.roleFlags.name,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.updateRole))
+
+	approval := cr.Group(governor.CmdDesc{
+		Usage: "approval",
+		Short: "manage user approvals",
+		Long:  "manage user approvals",
+	})
+
+	approval.Register(governor.CmdDesc{
+		Usage: "list",
+		Short: "list user approvals",
+		Long:  "list user approvals",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "amount",
+				Short:    "a",
+				Usage:    "amount",
+				Required: false,
+				Default:  8,
+				Value:    &c.listFlags.amount,
+			},
+			{
+				Long:     "offset",
+				Short:    "o",
+				Usage:    "offset",
+				Required: false,
+				Value:    &c.listFlags.offset,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.getApprovals))
+
+	approval.Register(governor.CmdDesc{
+		Usage: "accept",
+		Short: "accept user approvals",
+		Long:  "accept user approvals",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: true,
+				Value:    &c.useridFlags.userid,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.acceptApproval))
+
+	approval.Register(governor.CmdDesc{
+		Usage: "deny",
+		Short: "deny user approvals",
+		Long:  "deny user approvals",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: true,
+				Value:    &c.useridFlags.userid,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.denyApproval))
 }
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
@@ -434,15 +505,17 @@ func (c *CmdClient) addAdmin(args []string) error {
 
 func (c *CmdClient) getUser(args []string) error {
 	needToken := false
+	personal := false
 	u := "/user"
 	if c.getUserFlags.userid != "" {
 		u += "/id/" + c.getUserFlags.userid
 	} else if c.getUserFlags.username != "" {
 		u += "/name/" + c.getUserFlags.username
 	} else {
+		personal = true
 		needToken = true
 	}
-	if c.getUserFlags.private {
+	if !personal && c.getUserFlags.private {
 		u += "/private"
 		needToken = true
 	}
@@ -496,17 +569,11 @@ func (c *CmdClient) createUser(args []string) error {
 	if err != nil {
 		return kerrors.WithMsg(err, "Failed to create user request")
 	}
-	var body resUserUpdate
-	if _, err := c.httpc.DoJSON(context.Background(), r, &body); err != nil {
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
 		return kerrors.WithMsg(err, "Failed creating user")
 	}
-	if !body.Created {
-		c.log.Info(context.Background(), "Created user pending approval",
-			klog.AString("userid", body.Userid),
-			klog.AString("username", body.Username),
-		)
-	}
-	if _, err := io.WriteString(c.term.Stdout(), body.Userid+"\n"); err != nil {
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
 		return kerrors.WithMsg(err, "Failed writing response")
 	}
 	return nil
@@ -694,6 +761,41 @@ func (c *CmdClient) getRoleMembers(args []string) error {
 	}
 	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
 		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) updateRole(args []string) error {
+	r, err := c.httpc.ReqJSON(http.MethodPatch, fmt.Sprintf("/user/id/%s/role", c.useridFlags.userid), reqUserPatchRole{
+		Role: c.roleFlags.name,
+		Mod:  c.roleFlags.mod,
+		Add:  !c.roleFlags.rm,
+	})
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create update user roles request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
+		return kerrors.WithMsg(err, "Failed updating user roles")
+	}
+	return nil
+}
+
+func (c *CmdClient) updateName(args []string) error {
+	r, err := c.httpc.ReqJSON(http.MethodPut, "/user", reqUserPut{
+		FirstName: c.accountFlags.firstname,
+		LastName:  c.accountFlags.lastname,
+	})
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create update user request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
+		return kerrors.WithMsg(err, "Failed updating user name")
 	}
 	return nil
 }

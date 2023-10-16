@@ -9,8 +9,35 @@ import (
 
 type (
 	//forge:valid
+	reqUsernamePut struct {
+		NewUsername string `valid:"username" json:"new_username"`
+		OldUsername string `valid:"username,has" json:"old_username"`
+	}
+)
+
+func (s *router) putUsername(c *governor.Context) {
+	userid := gate.GetCtxUserid(c)
+
+	var req reqUsernamePut
+	if err := c.Bind(&req, false); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+
+	if err := s.s.updateUsername(c.Ctx(), userid, req.NewUsername, req.OldUsername); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
+type (
+	//forge:valid
 	reqUserPut struct {
-		Username  string `valid:"username" json:"username"`
 		FirstName string `valid:"firstName" json:"first_name"`
 		LastName  string `valid:"lastName" json:"last_name"`
 	}
@@ -67,7 +94,9 @@ func (s *router) patchRole(c *governor.Context) {
 }
 
 func (s *router) mountEdit(m *governor.MethodRouter) {
+	scopeAccountWrite := s.s.scopens + ".account:write"
 	scopeAdminWrite := s.s.scopens + ".admin:write"
-	m.PutCtx("", s.putUser, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
-	m.PatchCtx("/id/{id}/role", s.patchRole, gate.AuthUser(s.s.gate, scopeAdminWrite), s.rt)
+	m.PutCtx("/name", s.putUsername, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("", s.putUser, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, scopeAccountWrite), s.rt)
+	m.PatchCtx("/id/{id}/role", s.patchRole, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, scopeAdminWrite), s.rt)
 }

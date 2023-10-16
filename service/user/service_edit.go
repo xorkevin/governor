@@ -14,6 +14,44 @@ import (
 	"xorkevin.dev/klog"
 )
 
+func (s *Service) updateUsername(ctx context.Context, userid string, newUsername, oldUsername string) error {
+	if newUsername == oldUsername {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Username unchanged")
+	}
+	m, err := s.users.GetByID(ctx, userid)
+	if err != nil {
+		if errors.Is(err, dbsql.ErrNotFound) {
+			return governor.ErrWithRes(err, http.StatusNotFound, "", "User not found")
+		}
+		return kerrors.WithMsg(err, "Failed to get user")
+	}
+	if oldUsername != m.Username {
+		return governor.ErrWithRes(nil, http.StatusBadRequest, "", "Existing username does not match")
+	}
+	m.Username = newUsername
+	b, err := encodeUserEventUpdate(UpdateUserProps{
+		Userid:   m.Userid,
+		Username: m.Username,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err = s.users.UpdateUsername(ctx, m); err != nil {
+		if errors.Is(err, dbsql.ErrUnique) {
+			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Username must be unique")
+		}
+		return kerrors.WithMsg(err, "Failed to update user")
+	}
+
+	// must make a best effort to publish username update
+	ctx = klog.ExtendCtx(context.Background(), ctx)
+	if err := s.events.Publish(ctx, events.NewMsgs(s.eventSettings.streamUsers, userid, b)...); err != nil {
+		s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"))
+	}
+	return nil
+}
+
 func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPut) error {
 	m, err := s.users.GetByID(ctx, userid)
 	if err != nil {
@@ -22,35 +60,13 @@ func (s *Service) updateUser(ctx context.Context, userid string, ruser reqUserPu
 		}
 		return kerrors.WithMsg(err, "Failed to get user")
 	}
-	updUsername := m.Username != ruser.Username
-	m.Username = ruser.Username
 	m.FirstName = ruser.FirstName
 	m.LastName = ruser.LastName
-	var b []byte
-	if updUsername {
-		var err error
-		b, err = encodeUserEventUpdate(UpdateUserProps{
-			Userid:   m.Userid,
-			Username: m.Username,
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	if err = s.users.UpdateProps(ctx, m); err != nil {
 		if errors.Is(err, dbsql.ErrUnique) {
 			return governor.ErrWithRes(err, http.StatusBadRequest, "", "Username must be unique")
 		}
 		return kerrors.WithMsg(err, "Failed to update user")
-	}
-
-	if updUsername {
-		// must make a best effort to publish username update
-		ctx = klog.ExtendCtx(context.Background(), ctx)
-		if err := s.events.Publish(ctx, events.NewMsgs(s.eventSettings.streamUsers, userid, b)...); err != nil {
-			s.log.Err(ctx, kerrors.WithMsg(err, "Failed to publish update user props event"))
-		}
 	}
 	return nil
 }
