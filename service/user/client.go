@@ -22,6 +22,7 @@ type (
 		httpc        *governor.HTTPFetcher
 		reqUserPost  reqUserPost
 		addUserFlags addUserFlags
+		rmUserFlags  rmUserFlags
 		getUserFlags getUserFlags
 		listFlags    listFlags
 		useridFlags  useridFlags
@@ -32,6 +33,11 @@ type (
 
 	addUserFlags struct {
 		interactive bool
+	}
+
+	rmUserFlags struct {
+		userid   string
+		username string
 	}
 
 	getUserFlags struct {
@@ -233,6 +239,28 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.commitUser))
+
+	cr.Register(governor.CmdDesc{
+		Usage: "delete",
+		Short: "delete a user",
+		Long:  "delete a user",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "userid",
+				Short:    "i",
+				Usage:    "userid",
+				Required: true,
+				Value:    &c.rmUserFlags.userid,
+			},
+			{
+				Long:     "username",
+				Short:    "u",
+				Usage:    "username",
+				Required: true,
+				Value:    &c.rmUserFlags.username,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.rmUser))
 
 	account := cr.Group(governor.CmdDesc{
 		Usage: "account",
@@ -608,6 +636,22 @@ func (c *CmdClient) commitUser(args []string) error {
 	}
 	if _, err := io.WriteString(c.term.Stdout(), body.Userid+"\n"); err != nil {
 		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) rmUser(args []string) error {
+	r, err := c.httpc.ReqJSON(http.MethodDelete, fmt.Sprintf("/user/id/%s", c.rmUserFlags.userid), reqUserDelete{
+		Username: c.rmUserFlags.username,
+	})
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create user delete request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
+		return kerrors.WithMsg(err, "Failed deleting user")
 	}
 	return nil
 }

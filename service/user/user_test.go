@@ -102,7 +102,7 @@ func TestUsers(t *testing.T) {
 		resetmodel.New(db, "userresets"),
 		&acl,
 		&keyset,
-		kvmap,
+		kvmap.Subtree("user"),
 		psmux,
 		evmux,
 		&maillog,
@@ -142,11 +142,9 @@ func TestUsers(t *testing.T) {
 	adminUserid := strings.TrimSpace(out.String())
 	out.Reset()
 
-	{
-		adminToken, err := gateClient.GenToken(adminUserid, time.Hour, "")
-		assert.NoError(err)
-		gateClient.Token = adminToken
-	}
+	adminToken, err := gateClient.GenToken(adminUserid, time.Hour, "")
+	assert.NoError(err)
+	gateClient.Token = adminToken
 
 	{
 		userClient.getUserFlags = getUserFlags{
@@ -244,6 +242,55 @@ func TestUsers(t *testing.T) {
 
 		assert.Equal(regularUserid, strings.TrimSpace(out.String()))
 		out.Reset()
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.getApprovals(nil))
+
+		var body resApprovals
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Approvals, 0)
+	}
+
+	{
+		userClient.reqUserPost = reqUserPost{
+			Username:  "xorkevin3",
+			Password:  "password",
+			Email:     "test3@example.com",
+			FirstName: "Test",
+			LastName:  "User",
+		}
+		assert.NoError(userClient.createUser(nil))
+
+		var resRegularUserCreate resUserUpdate
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &resRegularUserCreate))
+		out.Reset()
+		denyUserid := resRegularUserCreate.Userid
+
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.getApprovals(nil))
+
+		var body resApprovals
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Approvals, 1)
+		assert.Equal(denyUserid, body.Approvals[0].Userid)
+		assert.False(body.Approvals[0].Approved)
+
+		userClient.useridFlags = useridFlags{
+			userid: denyUserid,
+		}
+		assert.NoError(userClient.denyApproval(nil))
 	}
 
 	{
@@ -657,6 +704,27 @@ func TestUsers(t *testing.T) {
 			assert.ErrorAs(err, &errres)
 			assert.Equal("OTP code already used", errres.Message)
 		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodPut, "/u/user/name", reqUsernamePut{
+				NewUsername: "xorkevin3",
+				OldUsername: "xorkevin2",
+			})
+			assert.NoError(err)
+
+			_, err = httpc.DoNoContent(context.Background(), r)
+			assert.NoError(err)
+		}
+
+		{
+			r, err := httpc.ReqJSON(http.MethodDelete, "/u/user/otp", reqOTPCodeBackup{
+				Backup: body.Backup,
+			})
+			assert.NoError(err)
+
+			_, err = httpc.DoNoContent(context.Background(), r)
+			assert.NoError(err)
+		}
 	}
 
 	{
@@ -686,13 +754,34 @@ func TestUsers(t *testing.T) {
 		assert.Equal(ResUserGet{
 			ResUserGetPublic: ResUserGetPublic{
 				Userid:       regularUserid,
-				Username:     "xorkevin2",
+				Username:     "xorkevin3",
 				FirstName:    "Test2",
 				LastName:     "User2",
 				CreationTime: body.CreationTime,
 			},
 			Email:      "test3@example.com",
-			OTPEnabled: true,
+			OTPEnabled: false,
 		}, body)
+	}
+
+	gateClient.Token = adminToken
+
+	{
+		userClient.rmUserFlags = rmUserFlags{
+			userid:   regularUserid,
+			username: "xorkevin3",
+		}
+		assert.NoError(userClient.rmUser(nil))
+	}
+
+	{
+		userClient.getUserFlags = getUserFlags{
+			userid: regularUserid,
+		}
+		err := userClient.getUser(nil)
+		assert.Error(err)
+		var errres *governor.ErrorServerRes
+		assert.ErrorAs(err, &errres)
+		assert.Equal(http.StatusNotFound, errres.Status)
 	}
 }

@@ -70,14 +70,14 @@ func (s *router) commitUser(c *governor.Context) {
 
 type (
 	//forge:valid
-	reqUserDeleteSelf struct {
+	reqUserDelete struct {
 		Userid   string `valid:"userid,has" json:"-"`
 		Username string `valid:"username,has" json:"username"`
 	}
 )
 
 func (s *router) deleteUserSelf(c *governor.Context) {
-	var req reqUserDeleteSelf
+	var req reqUserDelete
 	if err := c.Bind(&req, false); err != nil {
 		c.WriteError(err)
 		return
@@ -94,14 +94,6 @@ func (s *router) deleteUserSelf(c *governor.Context) {
 	}
 	c.WriteStatus(http.StatusNoContent)
 }
-
-type (
-	//forge:valid
-	reqUserDelete struct {
-		Userid   string `valid:"userid,has" json:"-"`
-		Username string `valid:"username,has" json:"username"`
-	}
-)
 
 func (s *router) deleteUser(c *governor.Context) {
 	var req reqUserDelete
