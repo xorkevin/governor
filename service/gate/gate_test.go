@@ -300,10 +300,10 @@ func TestGate(t *testing.T) {
 			Status: http.StatusForbidden,
 		},
 		{
-			Name:   "api key sudo failure",
+			Name:   "api key sudo success",
 			Path:   "/api/test/user/sudo",
 			Token:  akey.Key,
-			Status: http.StatusForbidden,
+			Status: http.StatusOK,
 		},
 		{
 			Name:   "user token check owner success",
