@@ -57,6 +57,8 @@ type (
 		Userid   string
 		Scope    string
 		AuthAt   time.Time
+		IsApikey bool
+		ApikeyID string
 	}
 
 	// Authorizer is a function to check the authorization of a user
@@ -68,8 +70,9 @@ func (c *Context) HasScope(scope string) bool {
 }
 
 type (
-	ctxKeyUserid struct{}
-	ctxKeyClaims struct{}
+	ctxKeyUserid   struct{}
+	ctxKeyApikeyID struct{}
+	ctxKeyClaims   struct{}
 )
 
 // GetCtxUserid returns a userid from the context
@@ -81,8 +84,18 @@ func GetCtxUserid(c *governor.Context) string {
 	return v.(string)
 }
 
+// GetCtxApikeyID returns an apikeyid from the context
+func GetCtxApikeyID(c *governor.Context) string {
+	v := c.Get(ctxKeyApikeyID{})
+	if v == nil {
+		return ""
+	}
+	return v.(string)
+}
+
 func setCtxApikey(c *governor.Context, userid string, keyid string) {
 	c.Set(ctxKeyUserid{}, userid)
+	c.Set(ctxKeyApikeyID{}, keyid)
 	c.LogAttrs(klog.AGroup("gate",
 		klog.AString("userid", userid),
 		klog.AString("keyid", keyid),
@@ -188,6 +201,8 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					IsSystem: false,
 					Userid:   userscope.Userid,
 					Scope:    userscope.Scope,
+					IsApikey: true,
+					ApikeyID: keyid,
 				}
 				setCtxApikey(c, userscope.Userid, keyid)
 			} else {
@@ -202,6 +217,7 @@ func AuthenticateCtx(g Gate, v Authorizer, scope string) governor.MiddlewareCtx 
 					Userid:   claims.Subject,
 					Scope:    claims.Scope,
 					AuthAt:   time.Unix(claims.AuthAt, 0).UTC(),
+					IsApikey: false,
 				}
 				if claims.Kind == "" {
 					ctx.Scope = ScopeAll
@@ -292,7 +308,7 @@ func AuthAdmin(g Gate, scope string) governor.MiddlewareCtx {
 // recently
 func AuthUserSudo(g Gate, d time.Duration, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
-		if time.Now().Round(0).After(c.AuthAt.Add(d)) {
+		if !c.IsApikey && time.Now().Round(0).After(c.AuthAt.Add(d)) {
 			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
 		}
 		if ok, err := checkRole(c, acl, RoleAdmin); err != nil {
@@ -308,7 +324,7 @@ func AuthUserSudo(g Gate, d time.Duration, scope string) governor.MiddlewareCtx 
 // logged in recently
 func AuthAdminSudo(g Gate, d time.Duration, scope string) governor.MiddlewareCtx {
 	return AuthenticateCtx(g, func(c Context, acl ACL) (bool, error) {
-		if time.Now().Round(0).After(c.AuthAt.Add(d)) {
+		if !c.IsApikey && time.Now().Round(0).After(c.AuthAt.Add(d)) {
 			return false, governor.ErrWithRes(nil, http.StatusForbidden, "", "Must auth again")
 		}
 		return checkRole(c, acl, RoleAdmin)

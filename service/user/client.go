@@ -29,6 +29,7 @@ type (
 		keyFlags     keyFlags
 		roleFlags    roleFlags
 		accountFlags accountFlags
+		apikeyFlags  apikeyFlags
 	}
 
 	addUserFlags struct {
@@ -71,6 +72,10 @@ type (
 	accountFlags struct {
 		firstname string
 		lastname  string
+	}
+
+	apikeyFlags struct {
+		keyid string
 	}
 )
 
@@ -478,6 +483,71 @@ func (c *CmdClient) Register(r governor.ConfigRegistrar, cr governor.CmdRegistra
 			},
 		},
 	}, governor.CmdHandlerFunc(c.denyApproval))
+
+	apikey := cr.Group(governor.CmdDesc{
+		Usage: "apikey",
+		Short: "manage apikeys",
+		Long:  "manage apikeys",
+	})
+
+	apikey.Register(governor.CmdDesc{
+		Usage: "list",
+		Short: "list apikeys",
+		Long:  "list apikeys",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "amount",
+				Short:    "a",
+				Usage:    "amount",
+				Required: false,
+				Default:  8,
+				Value:    &c.listFlags.amount,
+			},
+			{
+				Long:     "offset",
+				Short:    "o",
+				Usage:    "offset",
+				Required: false,
+				Value:    &c.listFlags.offset,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.listApikeys))
+
+	apikey.Register(governor.CmdDesc{
+		Usage: "check",
+		Short: "check an apikey",
+		Long:  "check an apikey",
+	}, governor.CmdHandlerFunc(c.checkApikey))
+
+	apikey.Register(governor.CmdDesc{
+		Usage: "rotate",
+		Short: "rotate apikey",
+		Long:  "rotate apikey",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "keyid",
+				Short:    "k",
+				Usage:    "keyid",
+				Required: false,
+				Value:    &c.apikeyFlags.keyid,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.rotateApikey))
+
+	apikey.Register(governor.CmdDesc{
+		Usage: "delete",
+		Short: "delete apikey",
+		Long:  "delete apikey",
+		Flags: []governor.CmdFlag{
+			{
+				Long:     "keyid",
+				Short:    "k",
+				Usage:    "keyid",
+				Required: false,
+				Value:    &c.apikeyFlags.keyid,
+			},
+		},
+	}, governor.CmdHandlerFunc(c.rmApikey))
 }
 
 func (c *CmdClient) Init(r governor.ClientConfigReader, kit governor.ClientKit) error {
@@ -840,6 +910,85 @@ func (c *CmdClient) updateName(args []string) error {
 	}
 	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
 		return kerrors.WithMsg(err, "Failed updating user name")
+	}
+	return nil
+}
+
+func (c *CmdClient) listApikeys(args []string) error {
+	r, err := c.httpc.HTTPClient.Req(
+		http.MethodGet,
+		fmt.Sprintf("/apikey?amount=%d&offset=%d", c.listFlags.amount, c.listFlags.offset),
+		nil,
+	)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create apikeys request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed getting apikeys")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) checkApikey(args []string) error {
+	r, err := c.httpc.HTTPClient.Req(http.MethodPost, "/apikey/check", nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create apikey check request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
+		return kerrors.WithMsg(err, "Failed checking apikey")
+	}
+	return nil
+}
+
+func (c *CmdClient) rotateApikey(args []string) error {
+	u := "/apikey"
+	if c.apikeyFlags.keyid != "" {
+		u += "/id/" + c.apikeyFlags.keyid
+	}
+	u += "/rotate"
+	r, err := c.httpc.HTTPClient.Req(http.MethodPut, u, nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create apikey rotate request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	_, body, err := c.httpc.DoBytes(context.Background(), r)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed rotating apikey")
+	}
+	if _, err := c.term.Stdout().Write(append(body, '\n')); err != nil {
+		return kerrors.WithMsg(err, "Failed writing response")
+	}
+	return nil
+}
+
+func (c *CmdClient) rmApikey(args []string) error {
+	u := "/apikey"
+	if c.apikeyFlags.keyid != "" {
+		u += "/id/" + c.apikeyFlags.keyid
+	} else {
+		u += "/discard"
+	}
+	r, err := c.httpc.HTTPClient.Req(http.MethodDelete, u, nil)
+	if err != nil {
+		return kerrors.WithMsg(err, "Failed to create apikey delete request")
+	}
+	if err := c.gate.AddReqToken(r); err != nil {
+		return kerrors.WithMsg(err, "Failed to add token")
+	}
+	if _, err := c.httpc.DoNoContent(context.Background(), r); err != nil {
+		return kerrors.WithMsg(err, "Failed deleting apikey")
 	}
 	return nil
 }

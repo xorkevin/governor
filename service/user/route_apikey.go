@@ -71,6 +71,22 @@ type (
 	}
 )
 
+func (s *router) deleteApikeySelf(c *governor.Context) {
+	req := reqApikeyID{
+		Userid: gate.GetCtxUserid(c),
+		Keyid:  gate.GetCtxApikeyID(c),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	if err := s.s.deleteApikey(c.Ctx(), req.Userid, req.Keyid); err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteStatus(http.StatusNoContent)
+}
+
 func (s *router) deleteApikey(c *governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
@@ -117,6 +133,23 @@ func (s *router) updateApikey(c *governor.Context) {
 	c.WriteStatus(http.StatusNoContent)
 }
 
+func (s *router) rotateApikeySelf(c *governor.Context) {
+	req := reqApikeyID{
+		Userid: gate.GetCtxUserid(c),
+		Keyid:  gate.GetCtxApikeyID(c),
+	}
+	if err := req.valid(); err != nil {
+		c.WriteError(err)
+		return
+	}
+	res, err := s.s.rotateApikey(c.Ctx(), req.Userid, req.Keyid)
+	if err != nil {
+		c.WriteError(err)
+		return
+	}
+	c.WriteJSON(http.StatusOK, res)
+}
+
 func (s *router) rotateApikey(c *governor.Context) {
 	req := reqApikeyID{
 		Userid: gate.GetCtxUserid(c),
@@ -152,6 +185,8 @@ func (s *router) mountApikey(r governor.Router) {
 	scopeApikeyWrite := s.s.scopens + ".apikey:write"
 	m.GetCtx("", s.getUserApikeys, gate.AuthUser(s.s.gate, scopeApikeyRead), s.rt)
 	m.PostCtx("", s.createApikey, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
+	m.PutCtx("/rotate", s.rotateApikeySelf, gate.AuthUser(s.s.gate, ""), s.rt)
+	m.DeleteCtx("/discard", s.deleteApikeySelf, gate.AuthUser(s.s.gate, ""), s.rt)
 	m.PutCtx("/id/{id}", s.updateApikey, gate.AuthUserSudo(s.s.gate, s.s.authSettings.sudoDuration, gate.ScopeNone), s.rt)
 	m.PutCtx("/id/{id}/rotate", s.rotateApikey, gate.AuthUser(s.s.gate, scopeApikeyWrite), s.rt)
 	m.DeleteCtx("/id/{id}", s.deleteApikey, gate.AuthUser(s.s.gate, scopeApikeyWrite), s.rt)

@@ -764,7 +764,45 @@ func TestUsers(t *testing.T) {
 		}, body)
 	}
 
-	gateClient.Token = adminToken
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, "/u/auth/login", reqUserAuth{
+			Username: "xorkevin",
+			Password: "password",
+		})
+		assert.NoError(err)
+
+		var authbody resUserAuth
+		_, err = httpc.DoJSON(context.Background(), r, &authbody)
+		assert.NoError(err)
+
+		assert.True(authbody.Valid)
+		gateClient.Token = authbody.AccessToken
+	}
+
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, "/u/apikey", reqApikeyPost{
+			Scope: "gov.user.admin.account:delete gov.user.apikey:read",
+			Name:  "admin key",
+			Desc:  "test key",
+		})
+		assert.NoError(err)
+
+		var body resApikeyModel
+		_, err = httpc.DoJSON(context.Background(), r, &body)
+		assert.NoError(err)
+
+		gateClient.Token = body.Key
+		assert.NoError(userClient.checkApikey(nil))
+
+		userClient.apikeyFlags = apikeyFlags{}
+		assert.NoError(userClient.rotateApikey(nil))
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.NotEqual(gateClient.Token, body.Key)
+		gateClient.Token = body.Key
+		assert.NoError(userClient.checkApikey(nil))
+	}
 
 	{
 		userClient.rmUserFlags = rmUserFlags{
@@ -783,5 +821,113 @@ func TestUsers(t *testing.T) {
 		var errres *governor.ErrorServerRes
 		assert.ErrorAs(err, &errres)
 		assert.Equal(http.StatusNotFound, errres.Status)
+	}
+
+	{
+		userClient.getUserFlags = getUserFlags{
+			userid:  regularUserid,
+			private: true,
+		}
+		err := userClient.getUser(nil)
+		assert.Error(err)
+		var errres *governor.ErrorServerRes
+		assert.ErrorAs(err, &errres)
+		assert.Equal(http.StatusForbidden, errres.Status)
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.listApikeys(nil))
+
+		var body resApikeys
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Apikeys, 1)
+		assert.Equal(adminUserid, body.Apikeys[0].Userid)
+	}
+
+	{
+		userClient.apikeyFlags = apikeyFlags{}
+		assert.NoError(userClient.rmApikey(nil))
+	}
+
+	gateClient.Token = adminToken
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.listApikeys(nil))
+
+		var body resApikeys
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Apikeys, 0)
+	}
+
+	{
+		r, err := httpc.ReqJSON(http.MethodPost, "/u/apikey", reqApikeyPost{
+			Scope: "",
+			Name:  "admin key",
+			Desc:  "test key",
+		})
+		assert.NoError(err)
+
+		_, err = httpc.DoJSON(context.Background(), r, nil)
+		assert.NoError(err)
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.listApikeys(nil))
+
+		var body resApikeys
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Apikeys, 1)
+		assert.Equal("", body.Apikeys[0].Scope)
+		assert.Equal("admin key", body.Apikeys[0].Name)
+		assert.Equal("test key", body.Apikeys[0].Desc)
+
+		r, err := httpc.ReqJSON(
+			http.MethodPut,
+			fmt.Sprintf("/u/apikey/id/%s", body.Apikeys[0].Keyid),
+			reqApikeyUpdate{
+				Scope: "gov.user.apikey:read",
+				Name:  "admin key 2",
+				Desc:  "test key 2",
+			},
+		)
+		assert.NoError(err)
+
+		_, err = httpc.DoNoContent(context.Background(), r)
+		assert.NoError(err)
+	}
+
+	{
+		userClient.listFlags = listFlags{
+			amount: 8,
+			offset: 0,
+		}
+		assert.NoError(userClient.listApikeys(nil))
+
+		var body resApikeys
+		assert.NoError(kjson.Unmarshal(out.Bytes(), &body))
+		out.Reset()
+
+		assert.Len(body.Apikeys, 1)
+		assert.Equal("gov.user.apikey:read", body.Apikeys[0].Scope)
+		assert.Equal("admin key 2", body.Apikeys[0].Name)
+		assert.Equal("test key 2", body.Apikeys[0].Desc)
 	}
 }
