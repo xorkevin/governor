@@ -69,19 +69,19 @@ func ToBytes(s string) (int64, error) {
 func ToString(bytes int64) string {
 	unitname := "B"
 	switch {
-	case bytes > PETABYTE:
+	case bytes >= PETABYTE:
 		bytes /= PETABYTE
 		unitname = "PiB"
-	case bytes > TERABYTE:
+	case bytes >= TERABYTE:
 		bytes /= TERABYTE
 		unitname = "TiB"
-	case bytes > GIGABYTE:
+	case bytes >= GIGABYTE:
 		bytes /= GIGABYTE
 		unitname = "GiB"
-	case bytes > MEGABYTE:
+	case bytes >= MEGABYTE:
 		bytes /= MEGABYTE
 		unitname = "MiB"
-	case bytes > KILOBYTE:
+	case bytes >= KILOBYTE:
 		bytes /= KILOBYTE
 		unitname = "KiB"
 	}
