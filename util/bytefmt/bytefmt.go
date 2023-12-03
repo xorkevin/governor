@@ -68,35 +68,22 @@ func ToBytes(s string) (int64, error) {
 
 func ToString(bytes int64) string {
 	unitname := "B"
-	for _, i := range []struct {
-		unit int64
-		name string
-	}{
-		{
-			unit: PETABYTE,
-			name: "PiB",
-		},
-		{
-			unit: TERABYTE,
-			name: "TiB",
-		},
-		{
-			unit: GIGABYTE,
-			name: "GiB",
-		},
-		{
-			unit: MEGABYTE,
-			name: "MiB",
-		},
-		{
-			unit: KILOBYTE,
-			name: "KiB",
-		},
-	} {
-		if bytes%i.unit == 0 {
-			bytes /= i.unit
-			unitname = i.name
-		}
+	switch {
+	case bytes > PETABYTE:
+		bytes /= PETABYTE
+		unitname = "PiB"
+	case bytes > TERABYTE:
+		bytes /= TERABYTE
+		unitname = "TiB"
+	case bytes > GIGABYTE:
+		bytes /= GIGABYTE
+		unitname = "GiB"
+	case bytes > MEGABYTE:
+		bytes /= MEGABYTE
+		unitname = "MiB"
+	case bytes > KILOBYTE:
+		bytes /= KILOBYTE
+		unitname = "KiB"
 	}
 	return strconv.FormatInt(bytes, 10) + unitname
 }
