@@ -142,7 +142,6 @@ func TestContext(t *testing.T) {
 				Error:        "Invalid JSON",
 			},
 		} {
-			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 
@@ -304,7 +303,6 @@ func TestContext(t *testing.T) {
 				NoLog:  true,
 			},
 		} {
-			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 

@@ -73,7 +73,6 @@ func TestMiddleware(t *testing.T) {
 				Encoding: "",
 			},
 		} {
-			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 

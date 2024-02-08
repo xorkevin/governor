@@ -366,7 +366,6 @@ func TestGate(t *testing.T) {
 			Status: http.StatusUnauthorized,
 		},
 	} {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 

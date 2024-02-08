@@ -725,7 +725,6 @@ func TestServer(t *testing.T) {
 				},
 			},
 		} {
-			tc := tc
 			t.Run(tc.Test, func(t *testing.T) {
 				t.Parallel()
 

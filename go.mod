@@ -1,8 +1,6 @@
 module xorkevin.dev/governor
 
-go 1.21
-
-toolchain go1.21.0
+go 1.22.0
 
 require (
 	blitiri.com.ar/go/spf v1.5.1

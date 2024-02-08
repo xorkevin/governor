@@ -68,7 +68,6 @@ func TestError(t *testing.T) {
 			String: "Invalid server response",
 		},
 	} {
-		tc := tc
 		assert.Equal(tc.String, tc.Err.Error())
 	}
 
@@ -93,7 +92,6 @@ func TestError(t *testing.T) {
 			String: "Too many requests. Try again after Sun, 25 Aug 1991 20:57:09 UTC.",
 		},
 	} {
-		tc := tc
 		assert.Contains(tc.Err.Error(), tc.String)
 	}
 }

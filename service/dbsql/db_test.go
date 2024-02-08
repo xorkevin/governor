@@ -57,7 +57,6 @@ func TestDatabase(t *testing.T) {
 			DB:   static,
 		},
 	} {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 
