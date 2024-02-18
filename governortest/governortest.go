@@ -92,7 +92,7 @@ func (h NotFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
 
-func NewTestClient(t *testing.T, server http.Handler, config map[string]any, termConfig *governor.TermConfig) *governor.Client {
+func NewTestClient(t testing.TB, server http.Handler, config map[string]any, termConfig *governor.TermConfig) *governor.Client {
 	t.Helper()
 
 	if config == nil {
