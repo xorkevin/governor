@@ -9,7 +9,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func NewStatic(t *testing.T) *dbsql.Static {
+func NewStatic(t testing.TB) *dbsql.Static {
 	t.Helper()
 	s, err := dbsql.NewStatic(
 		fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disable",

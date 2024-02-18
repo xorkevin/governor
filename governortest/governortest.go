@@ -16,7 +16,7 @@ import (
 	"xorkevin.dev/klog"
 )
 
-func NewTestServer(t *testing.T, config, secrets map[string]any, fsys fs.FS) *governor.Server {
+func NewTestServer(t testing.TB, config, secrets map[string]any, fsys fs.FS) *governor.Server {
 	t.Helper()
 
 	if config == nil {
