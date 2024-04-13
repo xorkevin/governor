@@ -6,6 +6,10 @@ log2() {
   echo "$@" > /dev/stderr
 }
 
+print2() {
+  printf "$@" > /dev/stderr
+}
+
 export GOV_TEST_POSTGRES_USERNAME=postgres
 export GOV_TEST_POSTGRES_PASSWORD=admin
 export GOV_TEST_POSTGRES_DB=postgres
@@ -32,11 +36,13 @@ cleanup() {
 
 trap cleanup EXIT
 
-dsn=postgresql://$GOV_TEST_POSTGRES_USERNAME:$GOV_TEST_POSTGRES_PASSWORD@$GOV_TEST_POSTGRES_HOST:$GOV_TEST_POSTGRES_PORT/$GOV_TEST_POSTGRES_DB
+dsn="postgresql://$GOV_TEST_POSTGRES_USERNAME:$GOV_TEST_POSTGRES_PASSWORD@$GOV_TEST_POSTGRES_HOST:$GOV_TEST_POSTGRES_PORT/$GOV_TEST_POSTGRES_DB"
 
 log2 "waiting for container $container_id"
 until psql $dsn -A -t -c "select 'ok';" > /dev/null 2>&1; do
   sleep 0.5
+  print2 "."
 done
+print2 "\n"
 
 go test -trimpath -ldflags "-w -s" -race "$@"
