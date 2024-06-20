@@ -1,4 +1,4 @@
-package maimln
+package main
 
 import (
 	"xorkevin.dev/governor"

@@ -314,7 +314,7 @@ const (
 	// May not contain any separators as defined by [RFC6455 section 4.1].
 	//
 	// [RFC6455 section 4.1]: https://www.rfc-editor.org/rfc/rfc6455#section-4.1
-	WSProtocolVersion  = "xorkevin.dev-governor_ws_v1alpha1"
+	WSProtocolVersion  = "xorkevin.dev-governor.ws.v1alpha1"
 	WSReadLimitDefault = 32768
 )
 
