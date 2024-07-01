@@ -2,6 +2,7 @@ package governor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -263,7 +264,10 @@ func (s *settings) init(ctx context.Context, flags Flags) error {
 		}
 	} else {
 		if err := s.v.ReadInConfig(); err != nil {
-			return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
+			var target viper.ConfigFileNotFoundError
+			if !errors.As(err, &target) {
+				return kerrors.WithKind(err, ErrInvalidConfig, "Failed to read in config")
+			}
 		}
 	}
 
