@@ -83,7 +83,7 @@ func (s *MuxChan) Subscribe(ctx context.Context, topic, group string) (Subscript
 	return sub, nil
 }
 
-func (s *MuxChan) unsubscribe(ctx context.Context, sub *chanSubscription) {
+func (s *MuxChan) unsubscribe(sub *chanSubscription) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -211,6 +211,6 @@ func (s *chanSubscription) Close(ctx context.Context) error {
 	default:
 	}
 
-	s.s.unsubscribe(ctx, s)
+	s.s.unsubscribe(s)
 	return nil
 }
