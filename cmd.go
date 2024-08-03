@@ -165,7 +165,7 @@ func (c *Cmd) prerun(cmd *cobra.Command, args []string) {
 	var handler *klog.SlogHandler
 	if c.cmdFlags.logPlain {
 		handler = klog.NewTextSlogHandler(logWriter)
-		handler.FieldTimeInfo = ""
+		handler.FieldTime = ""
 		handler.FieldCaller = ""
 		handler.FieldMod = ""
 	} else {
