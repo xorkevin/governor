@@ -410,7 +410,7 @@ func (s *Service) Setup(ctx context.Context, req governor.ReqSetup) error {
 }
 
 func (s *Service) Health(ctx context.Context) error {
-	if s.lc.Load(ctx) != nil {
+	if s.lc.Load(ctx) == nil {
 		return kerrors.WithKind(nil, governor.ErrInvalidConfig, "Mail service not ready")
 	}
 	return nil
